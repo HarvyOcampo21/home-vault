@@ -1,0 +1,9 @@
+[build]
+  command = "npm run build"
+  destination = "dist"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Permissions-Policy = "camera=self"
+    X-Content-Type-Options = "nosniff"
