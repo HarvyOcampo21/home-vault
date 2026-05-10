@@ -47,6 +47,8 @@ export async function scanReceipt(apiKey, imageBase64, mimeType) {
     generationConfig: {
       temperature: 0.1,
       maxOutputTokens: 2048,
+      // Add this line to force JSON mode
+      response_mime_type: "application/json",
     },
   };
 
@@ -65,16 +67,12 @@ export async function scanReceipt(apiKey, imageBase64, mimeType) {
   const data = await response.json();
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
-  // Strip markdown fences if present
-  const clean = text.replace(/```json|```/g, "").trim();
-
+  // If you use response_mime_type, 'text' will already be a clean JSON string
   let parsed;
   try {
-    parsed = JSON.parse(clean);
+    parsed = JSON.parse(text);
   } catch {
-    throw new Error(
-      "Could not read the receipt. Please try again or add items manually.",
-    );
+    throw new Error("Could not read the receipt logic.");
   }
 
   // Normalize items
