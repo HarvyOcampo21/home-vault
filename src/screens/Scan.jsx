@@ -31,7 +31,6 @@ export default function Scan() {
       streamRef.current = stream
       if (videoRef.current) {
         videoRef.current.srcObject = stream
-        await videoRef.current.play()
       }
       setCamActive(true)
     } catch (e) {
@@ -143,7 +142,7 @@ export default function Scan() {
               </div>
             ) : (
               <div style={styles.camWrap}>
-                <video ref={videoRef} style={styles.video} playsInline muted />
+                <video ref={videoRef} style={styles.video} autoPlay playsInline muted />
                 <canvas ref={canvasRef} style={{ display: 'none' }} />
                 <div style={styles.camOverlay}>
                   <div style={styles.camFrame} />
