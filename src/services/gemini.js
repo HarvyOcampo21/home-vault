@@ -1,5 +1,6 @@
+// Change 'v1' to 'v1beta'
 const GEMINI_URL =
-  "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent";
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
 
 const RECEIPT_PROMPT = `You are a receipt scanner. Analyze this receipt image or document and extract all information.
 
@@ -26,7 +27,10 @@ Rules:
 - The "total" field is the grand total paid`;
 
 export async function scanReceipt(apiKey, imageBase64, mimeType) {
-  if (!apiKey) throw new Error("AIzaSyBdnmAM54ZjHumMNQT85BzKsB5WCaDAmXY");
+  if (!apiKey)
+    throw new Error(
+      "Gemini API key not configured. Please add it in Settings.",
+    );
 
   const isDocument = mimeType === "application/pdf";
 
