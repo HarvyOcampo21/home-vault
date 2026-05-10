@@ -12,7 +12,25 @@ const SHEET_NAMES = {
 
 const MEMBERS = ['Angella','Ben','Alvin','Sachika','Harvy','Ruby','Jobel','Chu','Eva','Ananias']
 
-// ── Entry points ────────────────────────────────────────────
+// ── Date helpers ─────────────────────────────────────────────
+// Google Sheets returns dates as Date objects, not strings.
+function formatDate(val) {
+  if (!val) return ''
+  if (val instanceof Date) {
+    return Utilities.formatDate(val, Session.getScriptTimeZone(), 'yyyy-MM-dd')
+  }
+  return String(val).substring(0, 10)
+}
+
+function getMonth(val) {
+  if (!val) return ''
+  if (val instanceof Date) {
+    return Utilities.formatDate(val, Session.getScriptTimeZone(), 'yyyy-MM')
+  }
+  return String(val).substring(0, 7)
+}
+
+// ── Entry points ─────────────────────────────────────────────
 function doGet(e) {
   const action = e.parameter.action
   try {
@@ -48,22 +66,13 @@ function jsonResponse(data) {
     .setMimeType(ContentService.MimeType.JSON)
 }
 
-// ── Setup: create sheets if missing ─────────────────────────
+// ── Setup: create sheets if missing ──────────────────────────
 function setupSheets() {
   const ss = SpreadsheetApp.getActiveSpreadsheet()
-
-  ensureSheet(ss, SHEET_NAMES.TRANSACTIONS, [
-    'TxnID','Date','ScannedBy','Store','ReceiptNumber','HouseTotal','PersonalTotal','CreatedAt'
-  ])
-  ensureSheet(ss, SHEET_NAMES.ITEMS, [
-    'TxnID','Date','ItemName','Amount','Category','ForMember','BoughtBy','Status'
-  ])
-  ensureSheet(ss, SHEET_NAMES.IOUS, [
-    'IOUID','TxnID','Date','Item','Amount','BoughtBy','OwedBy','Status','DateSettled'
-  ])
-  ensureSheet(ss, SHEET_NAMES.SUMMARY, [
-    'Month','Member','HouseShare','PersonalSpend','IousOwed','IousReceivable','TotalOwed','UpdatedAt'
-  ])
+  ensureSheet(ss, SHEET_NAMES.TRANSACTIONS, ['TxnID','Date','ScannedBy','Store','ReceiptNumber','HouseTotal','PersonalTotal','CreatedAt'])
+  ensureSheet(ss, SHEET_NAMES.ITEMS, ['TxnID','Date','ItemName','Amount','Category','ForMember','BoughtBy','Status'])
+  ensureSheet(ss, SHEET_NAMES.IOUS, ['IOUID','TxnID','Date','Item','Amount','BoughtBy','OwedBy','Status','DateSettled'])
+  ensureSheet(ss, SHEET_NAMES.SUMMARY, ['Month','Member','HouseShare','PersonalSpend','IousOwed','IousReceivable','TotalOwed','UpdatedAt'])
 }
 
 function ensureSheet(ss, name, headers) {
@@ -71,83 +80,43 @@ function ensureSheet(ss, name, headers) {
   if (!sheet) {
     sheet = ss.insertSheet(name)
     sheet.getRange(1, 1, 1, headers.length).setValues([headers])
-    sheet.getRange(1, 1, 1, headers.length)
-      .setBackground('#1B5E3B')
-      .setFontColor('#ffffff')
-      .setFontWeight('bold')
+    sheet.getRange(1, 1, 1, headers.length).setBackground('#1B5E3B').setFontColor('#ffffff').setFontWeight('bold')
     sheet.setFrozenRows(1)
   }
   return sheet
 }
 
-// ── Save receipt ─────────────────────────────────────────────
+// ── Save receipt ──────────────────────────────────────────────
 function saveReceipt(payload) {
-  const ss   = SpreadsheetApp.getActiveSpreadsheet()
-  const now  = new Date().toISOString()
+  const ss  = SpreadsheetApp.getActiveSpreadsheet()
+  const now = new Date().toISOString()
+  // Store date as plain string to avoid Sheets date-object issues on re-read
+  const dateStr = payload.date || formatDate(new Date())
 
-  // Transactions sheet
   const txnSheet = getOrCreateSheet(ss, SHEET_NAMES.TRANSACTIONS)
-  txnSheet.appendRow([
-    payload.txnId,
-    payload.date,
-    payload.scannedBy,
-    payload.store,
-    payload.receiptNumber || '',
-    payload.houseTotal,
-    payload.personalTotal,
-    now,
-  ])
+  txnSheet.appendRow([payload.txnId, dateStr, payload.scannedBy, payload.store, payload.receiptNumber || '', payload.houseTotal, payload.personalTotal, now])
 
-  // Line items + IOUs
   const itemSheet = getOrCreateSheet(ss, SHEET_NAMES.ITEMS)
   const iouSheet  = getOrCreateSheet(ss, SHEET_NAMES.IOUS)
 
   for (const item of payload.items) {
-    itemSheet.appendRow([
-      payload.txnId,
-      payload.date,
-      item.name,
-      item.amount,
-      item.category,
-      item.forMember || '',
-      item.boughtBy,
-      item.status || 'paid',
-    ])
+    itemSheet.appendRow([payload.txnId, dateStr, item.name, item.amount, item.category, item.forMember || '', item.boughtBy, item.status || 'paid'])
 
-    // Create IOU if personal item for someone else and unpaid
-    if (
-      item.category === 'personal' &&
-      item.forMember &&
-      item.forMember !== item.boughtBy &&
-      item.status === 'unpaid'
-    ) {
-      const iouId = `IOU-${Date.now()}-${Math.random().toString(36).slice(2,6)}`
-      iouSheet.appendRow([
-        iouId,
-        payload.txnId,
-        payload.date,
-        item.name,
-        item.amount,
-        item.boughtBy,
-        item.forMember,
-        'unpaid',
-        '',
-      ])
+    if (item.category === 'personal' && item.forMember && item.forMember !== item.boughtBy && item.status === 'unpaid') {
+      const iouId = 'IOU-' + Date.now() + '-' + Math.random().toString(36).slice(2,6)
+      iouSheet.appendRow([iouId, payload.txnId, dateStr, item.name, item.amount, item.boughtBy, item.forMember, 'unpaid', ''])
     }
   }
 
-  // Refresh monthly summary
-  refreshSummary(payload.date.substring(0, 7))
-
+  refreshSummary(dateStr.substring(0, 7))
   return { success: true, txnId: payload.txnId }
 }
 
-// ── Settle IOU ───────────────────────────────────────────────
+// ── Settle IOU ────────────────────────────────────────────────
 function settleIOU(iouId) {
-  const ss       = SpreadsheetApp.getActiveSpreadsheet()
-  const sheet    = ss.getSheetByName(SHEET_NAMES.IOUS)
+  const ss    = SpreadsheetApp.getActiveSpreadsheet()
+  const sheet = ss.getSheetByName(SHEET_NAMES.IOUS)
   if (!sheet) return { error: 'IOUs sheet not found' }
-
   const data = sheet.getDataRange().getValues()
   for (let i = 1; i < data.length; i++) {
     if (data[i][0] === iouId) {
@@ -164,22 +133,12 @@ function getAllIOUs() {
   const ss    = SpreadsheetApp.getActiveSpreadsheet()
   const sheet = ss.getSheetByName(SHEET_NAMES.IOUS)
   if (!sheet) return { ious: [] }
-
   const data = sheet.getDataRange().getValues()
   if (data.length < 2) return { ious: [] }
-
-  const ious = data.slice(1).map(row => ({
-    id:          row[0],
-    txnId:       row[1],
-    date:        row[2],
-    item:        row[3],
-    amount:      row[4],
-    boughtBy:    row[5],
-    owedBy:      row[6],
-    status:      row[7],
-    dateSettled: row[8],
+  const ious = data.slice(1).filter(row => row[0]).map(row => ({
+    id: row[0], txnId: row[1], date: formatDate(row[2]), item: row[3],
+    amount: row[4], boughtBy: row[5], owedBy: row[6], status: row[7], dateSettled: formatDate(row[8]),
   }))
-
   return { ious }
 }
 
@@ -189,34 +148,19 @@ function getHistory(member, month) {
   const txnSheet = ss.getSheetByName(SHEET_NAMES.TRANSACTIONS)
   const itemSheet= ss.getSheetByName(SHEET_NAMES.ITEMS)
   if (!txnSheet) return { records: [] }
-
   const txnData  = txnSheet.getDataRange().getValues()
   const itemData = itemSheet ? itemSheet.getDataRange().getValues() : []
-
-  const records = []
+  const records  = []
   for (let i = 1; i < txnData.length; i++) {
     const row = txnData[i]
-    const rowMonth = String(row[1]).substring(0, 7)
+    if (!row[0]) continue
+    const rowMonth = getMonth(row[1])
     if (month && rowMonth !== month) continue
     if (member && row[2] !== member) continue
-
     const txnId = row[0]
-    const items = itemData.slice(1)
-      .filter(r => r[0] === txnId)
-      .map(r => ({ name: r[2], amount: r[3], category: r[4], forMember: r[5] }))
-
-    records.push({
-      txnId,
-      date:          row[1],
-      scannedBy:     row[2],
-      store:         row[3],
-      receiptNumber: row[4],
-      houseTotal:    row[5],
-      personalTotal: row[6],
-      items,
-    })
+    const items = itemData.slice(1).filter(r => r[0] === txnId).map(r => ({ name: r[2], amount: r[3], category: r[4], forMember: r[5] }))
+    records.push({ txnId, date: formatDate(row[1]), scannedBy: row[2], store: row[3], receiptNumber: row[4], houseTotal: row[5], personalTotal: row[6], items })
   }
-
   return { records: records.reverse() }
 }
 
@@ -225,21 +169,15 @@ function getSummary(month) {
   const ss       = SpreadsheetApp.getActiveSpreadsheet()
   const txnSheet = ss.getSheetByName(SHEET_NAMES.TRANSACTIONS)
   if (!txnSheet) return { houseTotal: 0, members: [] }
-
   const txnData  = txnSheet.getDataRange().getValues()
   let houseTotal = 0
-
   for (let i = 1; i < txnData.length; i++) {
-    const row      = txnData[i]
-    const rowMonth = String(row[1]).substring(0, 7)
-    if (rowMonth === month) houseTotal += Number(row[5]) || 0
+    const row = txnData[i]
+    if (!row[0]) continue
+    if (getMonth(row[1]) === month) houseTotal += Number(row[5]) || 0
   }
-
   const monthData = getMonthEnd(month)
-  return {
-    houseTotal,
-    members: monthData.members,
-  }
+  return { houseTotal, members: monthData.members }
 }
 
 // ── Get month-end breakdown ───────────────────────────────────
@@ -249,95 +187,74 @@ function getMonthEnd(month) {
   const iouSheet  = ss.getSheetByName(SHEET_NAMES.IOUS)
   const txnSheet  = ss.getSheetByName(SHEET_NAMES.TRANSACTIONS)
 
-  // House total for month
   let houseTotal = 0
-  const txnData = txnSheet ? txnSheet.getDataRange().getValues() : []
   const receiptCounts = {}
+  const txnData = txnSheet ? txnSheet.getDataRange().getValues() : []
   for (let i = 1; i < txnData.length; i++) {
     const row = txnData[i]
-    if (String(row[1]).substring(0, 7) !== month) continue
+    if (!row[0] || getMonth(row[1]) !== month) continue
     houseTotal += Number(row[5]) || 0
     receiptCounts[row[2]] = (receiptCounts[row[2]] || 0) + 1
   }
   const houseShare = houseTotal / MEMBERS.length
 
-  // Personal spend per member
-  const personalSpend  = {}
-  const iousOwed       = {}
-  const iousReceivable = {}
+  const personalSpend = {}, iousOwed = {}, iousReceivable = {}
   MEMBERS.forEach(m => { personalSpend[m] = 0; iousOwed[m] = 0; iousReceivable[m] = 0 })
 
   const itemData = itemSheet ? itemSheet.getDataRange().getValues() : []
   for (let i = 1; i < itemData.length; i++) {
     const row = itemData[i]
-    if (String(row[1]).substring(0, 7) !== month) continue
-    if (row[4] !== 'personal') continue
+    if (!row[0] || getMonth(row[1]) !== month || row[4] !== 'personal') continue
     const forMember = row[5] || row[6]
     const boughtBy  = row[6]
     const amount    = Number(row[3]) || 0
-    // If bought for yourself
     if (forMember === boughtBy && MEMBERS.includes(forMember)) {
       personalSpend[forMember] = (personalSpend[forMember] || 0) + amount
     }
   }
 
-  // IOUs
   const iouData = iouSheet ? iouSheet.getDataRange().getValues() : []
   for (let i = 1; i < iouData.length; i++) {
     const row = iouData[i]
-    if (row[7] !== 'unpaid') continue
-    const rowMonth = String(row[2]).substring(0, 7)
-    if (rowMonth !== month) continue
-    const amount   = Number(row[4]) || 0
-    const boughtBy = row[5]
-    const owedBy   = row[6]
-    if (MEMBERS.includes(owedBy))   iousOwed[owedBy]           = (iousOwed[owedBy] || 0)           + amount
-    if (MEMBERS.includes(boughtBy)) iousReceivable[boughtBy]   = (iousReceivable[boughtBy] || 0)   + amount
+    if (!row[0] || row[7] !== 'unpaid' || getMonth(row[2]) !== month) continue
+    const amount = Number(row[4]) || 0
+    if (MEMBERS.includes(row[6])) iousOwed[row[6]]         = (iousOwed[row[6]]         || 0) + amount
+    if (MEMBERS.includes(row[5])) iousReceivable[row[5]]   = (iousReceivable[row[5]]   || 0) + amount
   }
 
   const members = MEMBERS.map(name => {
-    const totalOwed =
-      houseShare +
-      (personalSpend[name]  || 0) +
-      (iousOwed[name]       || 0) -
-      (iousReceivable[name] || 0)
-
+    const totalOwed = houseShare + (iousOwed[name] || 0) - (iousReceivable[name] || 0)
     return {
       name,
-      houseShare:       parseFloat(houseShare.toFixed(2)),
-      personalSpend:    parseFloat((personalSpend[name]  || 0).toFixed(2)),
-      iousOwed:         parseFloat((iousOwed[name]       || 0).toFixed(2)),
-      iousReceivable:   parseFloat((iousReceivable[name] || 0).toFixed(2)),
-      totalOwed:        parseFloat(Math.max(0, totalOwed).toFixed(2)),
-      receiptsCount:    receiptCounts[name] || 0,
+      houseShare:      parseFloat(houseShare.toFixed(2)),
+      personalSpend:   parseFloat((personalSpend[name]  || 0).toFixed(2)),
+      iousOwed:        parseFloat((iousOwed[name]       || 0).toFixed(2)),
+      iousReceivable:  parseFloat((iousReceivable[name] || 0).toFixed(2)),
+      totalOwed:       parseFloat(Math.max(0, totalOwed).toFixed(2)),
+      receiptsCount:   receiptCounts[name] || 0,
     }
   })
 
-  return { month, houseTotal, members }
+  return { month, houseTotal: parseFloat(houseTotal.toFixed(2)), members }
 }
 
-// ── Refresh monthly summary sheet ────────────────────────────
+// ── Refresh monthly summary sheet ─────────────────────────────
 function refreshSummary(month) {
   const ss    = SpreadsheetApp.getActiveSpreadsheet()
   const sheet = getOrCreateSheet(ss, SHEET_NAMES.SUMMARY)
   const data  = getMonthEnd(month)
   const now   = new Date().toISOString()
-
-  // Remove existing rows for this month
-  const rows = sheet.getDataRange().getValues()
+  const rows  = sheet.getDataRange().getValues()
   for (let i = rows.length - 1; i >= 1; i--) {
     if (rows[i][0] === month) sheet.deleteRow(i + 1)
   }
-
-  // Append updated rows
   for (const m of data.members) {
-    sheet.appendRow([
-      month, m.name, m.houseShare, m.personalSpend,
-      m.iousOwed, m.iousReceivable, m.totalOwed, now
-    ])
+    sheet.appendRow([month, m.name, m.houseShare, m.personalSpend, m.iousOwed, m.iousReceivable, m.totalOwed, now])
   }
 }
 
 function getOrCreateSheet(ss, name) {
-  return ss.getSheetByName(name) || setupSheets() || ss.getSheetByName(name)
+  let sheet = ss.getSheetByName(name)
+  if (!sheet) { setupSheets(); sheet = ss.getSheetByName(name) }
+  return sheet
 }
