@@ -89,7 +89,7 @@ export default function Dashboard() {
             <p className="section-label" style={{ marginTop: 20 }}>My breakdown</p>
             <div className="card">
               <BreakRow label="House share"      value={(myData.houseShare    || 0).toFixed(2)} />
-              <BreakRow label="My personal spend" value={(myData.personalSpend || 0).toFixed(2)} />
+              <BreakRow label="My personal spend" value={(myData.personalSpend || 0).toFixed(2)} info />
               <BreakRow label="IOUs I owe"        value={(myData.iousOwed     || 0).toFixed(2)} />
               <BreakRow label="IOUs owed to me"   value={`-${(myData.iousReceivable || 0).toFixed(2)}`} positive />
               <div className="divider" />
@@ -158,11 +158,14 @@ function StatCard({ label, value, sub, color }) {
   )
 }
 
-function BreakRow({ label, value, bold, positive }) {
+function BreakRow({ label, value, bold, positive, info }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid var(--border)' }}>
-      <span style={{ fontSize: 14, color: bold ? 'var(--text)' : 'var(--text-2)', fontWeight: bold ? 700 : 400 }}>{label}</span>
-      <span style={{ fontSize: 14, fontWeight: bold ? 700 : 600, color: positive ? 'var(--green-dark)' : 'var(--text)' }}>
+      <div>
+        <span style={{ fontSize: 14, color: bold ? 'var(--text)' : 'var(--text-2)', fontWeight: bold ? 700 : 400 }}>{label}</span>
+        {info && <span style={{ fontSize: 11, color: 'var(--text-3)', marginLeft: 6 }}>· for your own record</span>}
+      </div>
+      <span style={{ fontSize: 14, fontWeight: bold ? 700 : 600, color: info ? 'var(--text-3)' : positive ? 'var(--green-dark)' : 'var(--text)' }}>
         AED {value}
       </span>
     </div>

@@ -138,7 +138,7 @@ function MemberCard({ member, houseShare, isCurrentUser }) {
         <div style={styles.breakdown}>
           <div className="divider" />
           <BreakRow label="House share"        value={houseShare.toFixed(2)} />
-          <BreakRow label="Personal spend"     value={Number(member.personalSpend || 0).toFixed(2)} />
+          <BreakRow label="Personal spend"     value={Number(member.personalSpend || 0).toFixed(2)} info />
           <BreakRow label="IOUs owed"          value={Number(member.iousOwed || 0).toFixed(2)} />
           <BreakRow label="IOUs receivable"    value={Number(member.iousReceivable || 0).toFixed(2)} minus />
           <div className="divider" />
@@ -149,13 +149,16 @@ function MemberCard({ member, houseShare, isCurrentUser }) {
   )
 }
 
-function BreakRow({ label, value, bold, minus }) {
+function BreakRow({ label, value, bold, minus, info }) {
   return (
     <div style={styles.breakRow}>
-      <span style={{ fontSize: 13, color: bold ? 'var(--text)' : 'var(--text-2)', fontWeight: bold ? 700 : 400 }}>
-        {minus ? '− ' : ''}{label}
-      </span>
-      <span style={{ fontSize: 13, fontWeight: bold ? 700 : 600, color: minus ? 'var(--green-dark)' : 'var(--text)' }}>
+      <div>
+        <span style={{ fontSize: 13, color: (bold || !info) ? (bold ? 'var(--text)' : 'var(--text-2)') : 'var(--text-3)', fontWeight: bold ? 700 : 400 }}>
+          {minus ? '− ' : ''}{label}
+        </span>
+        {info && <span style={{ fontSize: 11, color: 'var(--text-3)', marginLeft: 4 }}>· paid already</span>}
+      </div>
+      <span style={{ fontSize: 13, fontWeight: bold ? 700 : 600, color: info ? 'var(--text-3)' : minus ? 'var(--green-dark)' : 'var(--text)' }}>
         AED {value}
       </span>
     </div>
