@@ -1,6 +1,6 @@
-// Change 'v1' to 'v1beta'
+// Updated to v1beta and model version 2.5-flash
 const GEMINI_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 
 const RECEIPT_PROMPT = `You are a receipt scanner. Analyze this receipt image or document and extract all information.
 
