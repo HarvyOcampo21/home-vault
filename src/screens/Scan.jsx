@@ -25,16 +25,32 @@ export default function Scan() {
   async function startCamera() {
     setError('')
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }
-      })
+      // Try rear camera first, fall back to any camera
+      let stream
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' } }
+        })
+      } catch {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true })
+      }
+
       streamRef.current = stream
+
       if (videoRef.current) {
         videoRef.current.srcObject = stream
+        // iOS Safari PWA requires explicit play() call after srcObject is set
+        try { await videoRef.current.play() } catch {}
       }
       setCamActive(true)
     } catch (e) {
-      setError('Camera access denied. Please allow camera access and try again.')
+      if (e.name === 'NotAllowedError') {
+        setError('Camera access denied. In Safari: go to Settings → Safari → Camera → Allow.')
+      } else if (e.name === 'NotFoundError') {
+        setError('No camera found on this device.')
+      } else {
+        setError('Could not start camera. Please use the Image tab to upload a photo instead.')
+      }
     }
   }
 
