@@ -97,8 +97,8 @@ export function AppProvider({ children }) {
     setPendingReceipt({ ...EMPTY_RECEIPT, scannedBy: currentMember?.name || '' })
   }
 
-  const geminiKey    = localStorage.getItem('geminiApiKey') || ''
-  const sheetsUrl    = localStorage.getItem('sheetsScriptUrl') || ''
+  const geminiKey    = import.meta.env.VITE_GEMINI_API_KEY || ''
+  const sheetsUrl    = import.meta.env.VITE_SHEETS_SCRIPT_URL || ''
   const isConfigured = Boolean(geminiKey && sheetsUrl)
 
   return (
